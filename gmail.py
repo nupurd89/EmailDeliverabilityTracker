@@ -27,15 +27,20 @@ def get_labels(service, mId):
 
 def find_email(service, user_email, mId):
     messageheader= service.users().messages().get(userId="me", id=mId, format="full", metadataHeaders=None).execute()
-    # print(messageheader)
     headers=messageheader["payload"]["headers"]
-    subject= [i['value'] for i in headers if i["name"]=="From"]
-    to_email = subject[0]
+    email_from= [i['value'] for i in headers if i["name"]=="From"]
+    sub= [i['value'] for i in headers if i["name"]=="Subject"]
+    to_email = "From: " + email_from[0]
+    subject = "Subject: " + sub[0]
+    date = "Date: " + messageheader.get("internalDate")
+    lists = []
     temp = to_email.find(user_email)
     if temp is not -1:
-        return 1
-    else:
-        return 0
+        lists.append(to_email)
+        lists.append(subject)
+        lists.append(date)
+    return lists
+
 
 
 
@@ -99,10 +104,10 @@ def main():
         print('Messages:')
         for message in messages:
             mId = message.get("id")
-            bool = find_email(service, user_email, mId)
-            if bool is 1:
-                print("Message:")
-                print(message)
+            return_list = find_email(service, user_email, mId)
+            if len(return_list) is not 0:
+                for i in return_list:
+                    print(i)
                 get_labels(service, mId)
 
             #mIds.append(mId)
