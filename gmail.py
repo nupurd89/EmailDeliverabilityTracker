@@ -10,6 +10,7 @@ SCOPES = ['https://www.googleapis.com/auth/gmail.readonly',
           'https://www.googleapis.com/auth/gmail.labels']
 
 
+
 def credentials():
     creds = None
 
@@ -32,72 +33,40 @@ def credentials():
     return service
 
 
-def get_labels(service, mId, message):
-    results = service.users().messages().get(userId="me", id=mId).execute()
-    message['labelIds'] = (results.get('labelIds', []))
-
-def find_specific_list(service, mId):
-    messageheader= service.users().messages().get(userId="me", id=mId, format="full", metadataHeaders=None).execute()
-    return messageheader
-
-def find_email(service, user_email, mId, message):
-    hasEmail = False
-    messageheader = find_specific_list(service, mId)
-    headers=messageheader["payload"]["headers"]
-    email_from= [i['value'] for i in headers if i["name"]=="From"]
-    sub= [i['value'] for i in headers if i["name"]=="Subject"]
-    to_email = email_from[0]
-    subject = sub[0]
-    date = messageheader.get("internalDate")
-    lists = []
-    if user_email is not None:
-        temp = to_email.find(user_email)
-        if temp is not -1:
-            hasEmail = True
-            message['From'] = to_email
-            message['Subject'] = subject
-            message['Date'] = date
-            get_labels(service, mId, message)
-
-    else:
-        message['From'] = to_email
-        message['Subject'] = subject
-        message['Date'] = date
-        get_labels(service, mId, message)
-
-    return hasEmail
-
-
-
-def get_emails_all():
-    service = credentials()
-    results = service.users().messages().list(userId='me').execute()
-    messages = results.get('messages', [])
-    for message in messages:
-        mId = message.get("id")
-        find_email(service, None, mId, message)
-
-    return messages
-
-
-def get_emails_search(user_email):
+def get_emails(user_email):
     service = credentials()
     # Call the Gmail API
     #user_email = input("Enter your email:")
 
-    results = service.users().messages().list(userId='me').execute()
-    messages = results.get('messages', [])
+    
     emails = []
 
-    if not messages:
-        print('No messages found.')
-    else:
-        print('Messages:')
-        messagedict = []
-        for message in messages:
-            mId = message.get("id")
-            hasEmail = find_email(service, user_email, mId, message)
-            if(hasEmail):
-                messagedict.append(message)
+    def add_to_emails(request_id, response, exception):
+      if exception is not None:
+        # Do something with the exception
+        pass
+      else:
+        emailresponse = []
+        headers=response["payload"]["headers"]
+        for d in headers:
+            if d['name'] == 'From':
+                emailresponse.append(d['value'])
+            if d['name'] == 'Subject':
+                emailresponse.append(d['value'])
+        emailresponse.append(response.get('labelIds', []))
+        emails.append(emailresponse)
+        pass
 
-    return messagedict
+    batch = service.new_batch_http_request()
+
+    results = service.users().messages().list(userId='me', q=user_email).execute()
+    messages = results.get('messages', [])
+
+    for message in messages:
+        mId = message.get("id")
+        if user_email is None:
+            batch.add(service.users().messages().get(userId="me", id=mId, format="full", metadataHeaders=None), callback=add_to_emails)
+        else:
+            batch.add(service.users().messages().get(userId="me", id=mId, format="full", metadataHeaders=None), callback=add_to_emails)
+    batch.execute()
+    return emails
